@@ -17,6 +17,7 @@ use serde_json::Value;
 
 use crate::cli::CliError;
 use crate::facet::{facet_bin, SCHEMA_VERSION};
+use crate::profile::{env_configured, env_is_set, ProfileStatus};
 
 /// Exit code when the engine is unusable (facet unreachable, or no ncl/pack).
 /// Never a silent pass.
@@ -30,14 +31,6 @@ pub const HOST_LAW: &str =
     "cluster verbs run on the engine host that holds the cluster profile (tower/lima); \
 intent verbs need the intent profile (FACET_HEDRON_DB); eval runs wherever facet runs; \
 credentials are named, never printed";
-
-/// Profile leg status: names presence, never a path or credential value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ProfileStatus {
-    Missing,
-    Configured,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Capabilities {
@@ -350,18 +343,6 @@ fn profile_word(status: ProfileStatus) -> &'static str {
     match status {
         ProfileStatus::Missing => "missing",
         ProfileStatus::Configured => "configured",
-    }
-}
-
-fn env_is_set(name: &str) -> bool {
-    std::env::var_os(name).is_some_and(|value| !value.is_empty())
-}
-
-fn env_configured(name: &str) -> ProfileStatus {
-    if env_is_set(name) {
-        ProfileStatus::Configured
-    } else {
-        ProfileStatus::Missing
     }
 }
 

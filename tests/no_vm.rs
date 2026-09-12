@@ -13,4 +13,8 @@ fn lockfile_has_no_nickel_vm() {
         !lock.contains("name = \"hedron-ncl\""),
         "tetra must not depend on hedron-ncl"
     );
+    assert!(
+        !lock.contains("name = \"rusqlite\""),
+        "tetra must not open SQLite (no rusqlite)"
+    );
 }

@@ -64,6 +64,28 @@ enum Command {
         #[arg(long)]
         no_materialize: bool,
     },
+    /// Read cluster, intent, and calls by names from a World export.
+    Status {
+        /// Path to a .ncl module.
+        path: PathBuf,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
+    /// Compare desired export against observed status; exit 1 on drift.
+    Diff {
+        /// Path to a .ncl module.
+        path: PathBuf,
+        /// Human YAML view of desired export only (never POST/apply).
+        #[arg(long)]
+        yaml: bool,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
+    /// Parse an admission error (h3s Status JSON or kubectl stderr; never evaluates Nickel).
+    Blame {
+        /// Status JSON, kubectl stderr, or `-` for stdin.
+        input: Option<String>,
+    },
     /// Lattice session join key (wraps `facet session`).
     Session {
         #[command(subcommand)]
@@ -130,6 +152,11 @@ pub fn execute(invoked_as: &str) -> Result<(), CliError> {
         Some(Command::Eval { path, rest }) => facet::run("export", &path, &rest, cli.json),
         Some(Command::Apply { path, rest }) => facet::run("apply", &path, &rest, cli.json),
         Some(Command::Doctor { no_materialize }) => crate::doctor::run(cli.json, !no_materialize),
+        Some(Command::Status { path, rest }) => crate::status::run(&path, &rest, cli.json),
+        Some(Command::Diff { path, yaml, rest }) => {
+            crate::diff::run(&path, &rest, cli.json, yaml)
+        }
+        Some(Command::Blame { input }) => crate::blame::run(input.as_deref(), cli.json),
         Some(Command::Session { command }) => match command {
             SessionCommand::Start { rest } => session::start(&rest, cli.json),
             SessionCommand::End { id, rest } => session::end(id.as_deref(), &rest, cli.json),

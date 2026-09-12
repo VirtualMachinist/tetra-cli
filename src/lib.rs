@@ -1,7 +1,11 @@
+mod blame;
 mod cli;
+mod diff;
 mod doctor;
 mod facet;
+mod profile;
 mod session;
+mod status;
 
 pub use cli::CliError;
 
