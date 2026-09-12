@@ -209,7 +209,8 @@ fn materialize_pack(
     } else {
         std::env::temp_dir().join(format!("tetra-doctor-{}", std::process::id()))
     };
-    let staging = base.join(".staging");
+    // Per-process staging: several doctors may run in one directory at once.
+    let staging = base.join(format!(".staging-{}", std::process::id()));
     let _ = fs::remove_dir_all(&staging);
     if let Err(error) = fs::create_dir_all(&staging) {
         problems.push(format!(
@@ -245,13 +246,30 @@ fn materialize_pack(
         };
     }
     let target = base.join(&contract_set);
-    let _ = fs::remove_dir_all(&target);
-    if let Err(error) = fs::rename(&staging, &target) {
-        problems.push(format!(
-            "cannot place the pack under {PACK_DIR}: {}",
-            error.kind()
-        ));
+    // Another doctor may have placed an identical pack meanwhile: if its
+    // marker matches, keep it and drop our staging; otherwise replace it.
+    let placed = if marker_matches(&target, &contract_set) {
         let _ = fs::remove_dir_all(&staging);
+        true
+    } else {
+        let _ = fs::remove_dir_all(&target);
+        match fs::rename(&staging, &target) {
+            Ok(()) => true,
+            Err(_) if marker_matches(&target, &contract_set) => {
+                let _ = fs::remove_dir_all(&staging);
+                true
+            }
+            Err(error) => {
+                problems.push(format!(
+                    "cannot place the pack under {PACK_DIR}: {}",
+                    error.kind()
+                ));
+                let _ = fs::remove_dir_all(&staging);
+                false
+            }
+        }
+    };
+    if !placed {
         return PackLeg {
             contract_set: Some(contract_set),
             ..PackLeg::default()

@@ -61,7 +61,12 @@ fn castle_like_host_has_engine_pack_and_host_law_but_no_profiles() {
     assert!(abs
         .join("hedron-ncl/overlay/k8s-1.34-h3s-0.9.1.ncl")
         .is_file());
-    assert!(!abs.parent().unwrap().join(".staging").exists());
+    let leftovers: Vec<_> = std::fs::read_dir(abs.parent().unwrap())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(".staging"))
+        .collect();
+    assert!(leftovers.is_empty(), "staging left behind: {leftovers:?}");
     // The materialized pack lets a world import hedron-ncl/… through the wrap.
     std::fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/world.ncl"),
