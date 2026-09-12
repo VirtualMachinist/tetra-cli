@@ -1,9 +1,6 @@
 mod cli;
 mod facet;
 
-
-
-
 pub use cli::CliError;
 
 /// Binary name (`tetractl` or `tetra`) from argv0.

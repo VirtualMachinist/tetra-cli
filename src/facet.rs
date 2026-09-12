@@ -40,15 +40,12 @@ pub fn forward_session(command: &mut Command) {
 
 /// Validate Facet stdout JSON and return it without reshaping the envelope.
 pub fn passthrough_json(stdout: &[u8]) -> Result<Value, CliError> {
-    let value: Value = serde_json::from_slice(stdout).map_err(|error| {
-        CliError::engine(format!("facet stdout is not JSON: {error}"), 127)
-    })?;
+    let value: Value = serde_json::from_slice(stdout)
+        .map_err(|error| CliError::engine(format!("facet stdout is not JSON: {error}"), 127))?;
     let version = value.get("schemaVersion").and_then(|v| v.as_u64());
     if version != Some(SCHEMA_VERSION) {
         return Err(CliError::engine(
-            format!(
-                "facet JSON schemaVersion must be {SCHEMA_VERSION}, got {version:?}"
-            ),
+            format!("facet JSON schemaVersion must be {SCHEMA_VERSION}, got {version:?}"),
             127,
         ));
     }
@@ -59,11 +56,7 @@ pub fn passthrough_json(stdout: &[u8]) -> Result<Value, CliError> {
 pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), CliError> {
     let facet = facet_bin();
     let mut command = Command::new(&facet);
-    command
-        .arg("ncl")
-        .arg(sub)
-        .arg(path)
-        .args(rest);
+    command.arg("ncl").arg(sub).arg(path).args(rest);
     if json {
         command.arg("--json");
     }
@@ -88,14 +81,13 @@ pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), Cl
     io::stderr().write_all(&output.stderr).ok();
     io::stdout().write_all(&output.stdout).ok();
 
+    // Parity: Facet already reported the failure on its own stdout/stderr.
+    // Propagate the exit code without adding a second line.
     let code = output.status.code().unwrap_or(1) as u8;
     if output.status.success() {
         Ok(())
     } else {
-        Err(CliError::engine(
-            format!("{facet} ncl {sub} exited with status {code}"),
-            code,
-        ))
+        Err(CliError::engine(String::new(), code))
     }
 }
 
@@ -164,7 +156,11 @@ printf '{"schemaVersion":1,"argv":%s,"facetSession":%s}\n' \
         std::env::remove_var(FACET_SESSION_ENV);
 
         let mut command = Command::new(facet_bin());
-        command.arg("ncl").arg("export").arg("world.ncl").arg("--json");
+        command
+            .arg("ncl")
+            .arg("export")
+            .arg("world.ncl")
+            .arg("--json");
         forward_session(&mut command);
         let output = command.output().unwrap();
         let json = passthrough_json(&output.stdout).unwrap();
@@ -198,7 +194,11 @@ printf '{"schemaVersion":1,"argv":%s,"facetSession":%s}\n' \
         std::env::set_var(FACET_SESSION_ENV, "01FACETULID");
 
         let mut command = Command::new(facet_bin());
-        command.arg("ncl").arg("check").arg("world.ncl").arg("--json");
+        command
+            .arg("ncl")
+            .arg("check")
+            .arg("world.ncl")
+            .arg("--json");
         forward_session(&mut command);
         let output = command.output().unwrap();
         let json = passthrough_json(&output.stdout).unwrap();

@@ -82,7 +82,9 @@ impl CliError {
     }
 
     pub fn exit(self) -> ExitCode {
-        eprintln!("{}", self.message);
+        if !self.message.is_empty() {
+            eprintln!("{}", self.message);
+        }
         ExitCode::from(self.code)
     }
 }
@@ -92,7 +94,8 @@ pub fn execute(invoked_as: &str) -> Result<(), CliError> {
     match cli.command {
         None => {
             let mut cmd = Cli::command();
-            cmd.print_help().map_err(|error| CliError::usage(error.to_string()))?;
+            cmd.print_help()
+                .map_err(|error| CliError::usage(error.to_string()))?;
             println!();
             Ok(())
         }
