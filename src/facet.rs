@@ -119,16 +119,15 @@ pub fn current_session_id() -> Result<String, CliError> {
             return Ok(id);
         }
     }
-    Err(CliError::usage("no active session; run `tetractl session start` first"))
+    Err(CliError::usage(
+        "no active session; run `tetractl session start` first",
+    ))
 }
 
 /// `check` → `facet ncl check`, `export` → `facet ncl export`, `apply` → `facet ncl apply`.
 pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), CliError> {
-    let mut args: Vec<std::ffi::OsString> = vec![
-        "ncl".into(),
-        sub.into(),
-        path.as_os_str().to_owned(),
-    ];
+    let mut args: Vec<std::ffi::OsString> =
+        vec!["ncl".into(), sub.into(), path.as_os_str().to_owned()];
     args.extend(rest.iter().map(std::ffi::OsString::from));
     let output = exec(args, json, true)?;
     io::stderr().write_all(&output.stderr).ok();
