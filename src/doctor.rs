@@ -1,6 +1,15 @@
-//! `tetractl doctor` JSON envelope (G2c). Presence-only profiles; never secret values.
+//! `tetractl doctor`: capabilities, **host law**, and the materialized pack
+//! (G2a), on the presence-only JSON envelope (G2c). Never secret values.
+//!
+//! Host law: cluster verbs run on the engine host that holds the cluster
+//! profile (tower/lima); intent verbs need the intent profile; eval runs
+//! wherever facet runs. Doctor says which of those this host is, by name.
+//! It also materializes the contract pack under `.tetra/pack/<contractSet>/`
+//! so worlds can `import "hedron-ncl/…"` with `--import-path`.
 
+use std::fs;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Serialize;
@@ -8,6 +17,19 @@ use serde_json::Value;
 
 use crate::cli::CliError;
 use crate::facet::{facet_bin, SCHEMA_VERSION};
+
+/// Exit code when the engine is unusable (facet unreachable, or no ncl/pack).
+/// Never a silent pass.
+pub const ENGINE_MISSING_EXIT_CODE: u8 = 5;
+
+/// Where doctor materializes the pack, relative to the current directory.
+pub const PACK_DIR: &str = ".tetra/pack";
+
+/// The host law sentence carried in `host.law`.
+pub const HOST_LAW: &str =
+    "cluster verbs run on the engine host that holds the cluster profile (tower/lima); \
+intent verbs need the intent profile (FACET_HEDRON_DB); eval runs wherever facet runs; \
+credentials are named, never printed";
 
 /// Profile leg status: names presence, never a path or credential value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -48,6 +70,22 @@ pub struct EnvPresence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HostLaw {
+    pub law: &'static str,
+}
+
+/// The materialized contract pack. `import_path` is relative to the current
+/// directory and is the value to pass as `--import-path`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PackLeg {
+    pub contract_set: Option<String>,
+    pub import_path: Option<String>,
+    pub materialized: bool,
+    pub marker_matches: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DoctorReport {
     pub schema_version: u64,
@@ -56,13 +94,46 @@ pub struct DoctorReport {
     pub intent: IntentLeg,
     pub facet: FacetLeg,
     pub env: EnvPresence,
+    pub host: HostLaw,
+    pub pack: PackLeg,
+    /// Human sentences for what is missing. Never carries a value.
+    pub problems: Vec<String>,
 }
 
 impl DoctorReport {
+    /// Collect for the current directory, materializing the pack.
     pub fn collect() -> Self {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::collect_in(&cwd, true)
+    }
+
+    /// Collect for `cwd`; `materialize` writes `.tetra/pack/<contractSet>/`
+    /// there, otherwise the pack is probed in a temp dir and removed.
+    pub fn collect_in(cwd: &Path, materialize: bool) -> Self {
         let bin = facet_bin();
         let reachable = facet_reachable(&bin);
         let capabilities = probe_capabilities(&bin, reachable);
+        let mut problems = Vec::new();
+        if !reachable {
+            problems.push(format!(
+                "facet is not runnable as `{}`; install facet on PATH or set FACET_BIN",
+                path_basename(&bin)
+            ));
+        } else if !capabilities.ncl {
+            problems
+                .push("facet has no `ncl` subcommand; need a Facet with the Nickel pack".into());
+        } else if !capabilities.pack {
+            problems
+                .push("facet ncl has no `pack`; need Facet at or after the ncl-pack cut".into());
+        }
+        let pack = if capabilities.pack {
+            materialize_pack(&bin, cwd, materialize, &mut problems)
+        } else {
+            PackLeg::default()
+        };
+        if env_is_set("FACET_KUBECONFIG") && !env_is_file("FACET_KUBECONFIG") {
+            problems.push("cluster profile is set but is not a readable file".into());
+        }
         Self {
             schema_version: SCHEMA_VERSION,
             capabilities,
@@ -80,30 +151,135 @@ impl DoctorReport {
                 facet_session: env_is_set("FACET_SESSION"),
                 tetra_session: env_is_set("TETRA_SESSION"),
             },
+            host: HostLaw { law: HOST_LAW },
+            pack,
+            problems,
         }
     }
 
+    /// The engine is usable: facet runs and has `ncl` and `pack`.
+    pub fn engine_ok(&self) -> bool {
+        self.facet.reachable && self.capabilities.ncl && self.capabilities.pack
+    }
+
     pub fn to_json(&self) -> Result<Value, CliError> {
-        let value = serde_json::to_value(self)
-            .map_err(|error| CliError::engine(format!("doctor JSON encode failed: {error}"), 127))?;
+        let value = serde_json::to_value(self).map_err(|error| {
+            CliError::engine(format!("doctor JSON encode failed: {error}"), 127)
+        })?;
         reject_secret_fields(&value)?;
         Ok(value)
     }
 }
 
-pub fn run(json: bool) -> Result<(), CliError> {
-    let report = DoctorReport::collect();
+pub fn run(json: bool, materialize: bool) -> Result<(), CliError> {
+    let report = if materialize {
+        DoctorReport::collect()
+    } else {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        DoctorReport::collect_in(&cwd, false)
+    };
     if json {
         let value = report.to_json()?;
-        let bytes = serde_json::to_vec(&value)
-            .map_err(|error| CliError::engine(format!("doctor JSON encode failed: {error}"), 127))?;
+        let bytes = serde_json::to_vec(&value).map_err(|error| {
+            CliError::engine(format!("doctor JSON encode failed: {error}"), 127)
+        })?;
         io::stdout().write_all(&bytes).ok();
         println!();
-        Ok(())
     } else {
         print_human(&report);
-        Ok(())
     }
+    if report.engine_ok() {
+        Ok(())
+    } else {
+        // The document above already says what is missing.
+        Err(CliError::engine(String::new(), ENGINE_MISSING_EXIT_CODE))
+    }
+}
+
+/// Run `facet ncl pack` into a staging dir; on `materialize` move it to
+/// `<cwd>/.tetra/pack/<contractSet>/`, else probe and remove. Checks the marker.
+fn materialize_pack(
+    bin: &str,
+    cwd: &Path,
+    materialize: bool,
+    problems: &mut Vec<String>,
+) -> PackLeg {
+    let base = if materialize {
+        cwd.join(PACK_DIR)
+    } else {
+        std::env::temp_dir().join(format!("tetra-doctor-{}", std::process::id()))
+    };
+    let staging = base.join(".staging");
+    let _ = fs::remove_dir_all(&staging);
+    if let Err(error) = fs::create_dir_all(&staging) {
+        problems.push(format!(
+            "cannot create the pack staging directory: {}",
+            error.kind()
+        ));
+        return PackLeg::default();
+    }
+    let out = Command::new(bin)
+        .args(["ncl", "pack", "--out"])
+        .arg(&staging)
+        .arg("--json")
+        .output();
+    let contract_set = match out {
+        Ok(out) if out.status.success() => serde_json::from_slice::<Value>(&out.stdout)
+            .ok()
+            .and_then(|v| v["contractSet"].as_str().map(str::to_owned)),
+        _ => None,
+    };
+    let Some(contract_set) = contract_set else {
+        problems.push("facet ncl pack --out did not report a contractSet".into());
+        let _ = fs::remove_dir_all(if materialize { staging } else { base });
+        return PackLeg::default();
+    };
+    if !materialize {
+        let marker_matches = marker_matches(&staging, &contract_set);
+        let _ = fs::remove_dir_all(&base);
+        return PackLeg {
+            contract_set: Some(contract_set),
+            import_path: None,
+            materialized: false,
+            marker_matches,
+        };
+    }
+    let target = base.join(&contract_set);
+    let _ = fs::remove_dir_all(&target);
+    if let Err(error) = fs::rename(&staging, &target) {
+        problems.push(format!(
+            "cannot place the pack under {PACK_DIR}: {}",
+            error.kind()
+        ));
+        let _ = fs::remove_dir_all(&staging);
+        return PackLeg {
+            contract_set: Some(contract_set),
+            ..PackLeg::default()
+        };
+    }
+    let marker_matches = marker_matches(&target, &contract_set);
+    if !marker_matches {
+        problems.push("materialized pack marker does not match the reported contractSet".into());
+    }
+    PackLeg {
+        import_path: Some(format!("{PACK_DIR}/{contract_set}")),
+        contract_set: Some(contract_set),
+        materialized: true,
+        marker_matches,
+    }
+}
+
+fn marker_matches(import_path: &Path, contract_set: &str) -> bool {
+    fs::read_to_string(import_path.join("hedron-ncl").join("contract-set"))
+        .map(|text| text.trim() == contract_set)
+        .unwrap_or(false)
+}
+
+/// Is `name` set to a readable regular file? Metadata only; never read.
+fn env_is_file(name: &str) -> bool {
+    std::env::var_os(name)
+        .map(PathBuf::from)
+        .is_some_and(|path| fs::metadata(path).map(|m| m.is_file()).unwrap_or(false))
 }
 
 fn print_human(report: &DoctorReport) {
@@ -118,12 +294,38 @@ fn print_human(report: &DoctorReport) {
     println!(
         "facet: {} ({})",
         report.facet.bin,
-        if report.facet.reachable { "reachable" } else { "missing" }
+        if report.facet.reachable {
+            "reachable"
+        } else {
+            "missing"
+        }
     );
+    println!(
+        "pack: {} at {}{}",
+        report.pack.contract_set.as_deref().unwrap_or("-"),
+        report
+            .pack
+            .import_path
+            .as_deref()
+            .unwrap_or("(not materialized)"),
+        if report.pack.contract_set.is_some() && !report.pack.marker_matches {
+            " (marker MISMATCH)"
+        } else {
+            ""
+        }
+    );
+    println!("host law: {HOST_LAW}");
+    for problem in &report.problems {
+        println!("problem: {problem}");
+    }
 }
 
 fn status_word(ok: bool) -> &'static str {
-    if ok { "ok" } else { "missing" }
+    if ok {
+        "ok"
+    } else {
+        "missing"
+    }
 }
 
 fn profile_word(status: ProfileStatus) -> &'static str {
@@ -279,6 +481,9 @@ mod tests {
                 facet_session: false,
                 tetra_session: false,
             },
+            host: HostLaw { law: HOST_LAW },
+            pack: PackLeg::default(),
+            problems: Vec::new(),
         };
         let json = report.to_json().unwrap();
         assert_eq!(json["schemaVersion"], SCHEMA_VERSION);
