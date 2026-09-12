@@ -152,9 +152,13 @@ pub fn execute(invoked_as: &str) -> Result<(), CliError> {
         Some(Command::Eval { path, rest }) => facet::run("export", &path, &rest, cli.json),
         Some(Command::Apply { path, rest }) => facet::run("apply", &path, &rest, cli.json),
         Some(Command::Doctor { no_materialize }) => crate::doctor::run(cli.json, !no_materialize),
-        Some(Command::Status { path, rest }) => crate::status::run(&path, &rest, cli.json),
+        Some(Command::Status { path, rest }) => {
+            let (rest, json, _) = split_view_flags(rest, cli.json, false);
+            crate::status::run(&path, &rest, json)
+        }
         Some(Command::Diff { path, yaml, rest }) => {
-            crate::diff::run(&path, &rest, cli.json, yaml)
+            let (rest, json, yaml) = split_view_flags(rest, cli.json, yaml);
+            crate::diff::run(&path, &rest, json, yaml)
         }
         Some(Command::Blame { input }) => crate::blame::run(input.as_deref(), cli.json),
         Some(Command::Session { command }) => match command {
@@ -162,6 +166,28 @@ pub fn execute(invoked_as: &str) -> Result<(), CliError> {
             SessionCommand::End { id, rest } => session::end(id.as_deref(), &rest, cli.json),
         },
     }
+}
+
+/// `--json` / `--yaml` after the path land in the trailing forwarded args;
+/// for tetra-owned verbs they are tetra's view flags, not facet's.
+fn split_view_flags(rest: Vec<String>, json: bool, yaml: bool) -> (Vec<String>, bool, bool) {
+    let mut json = json;
+    let mut yaml = yaml;
+    let rest = rest
+        .into_iter()
+        .filter(|arg| match arg.as_str() {
+            "--json" => {
+                json = true;
+                false
+            }
+            "--yaml" => {
+                yaml = true;
+                false
+            }
+            _ => true,
+        })
+        .collect();
+    (rest, json, yaml)
 }
 
 fn prepend_name(invoked_as: &str) -> Vec<String> {
