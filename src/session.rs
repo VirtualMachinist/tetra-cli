@@ -86,13 +86,9 @@ fn validate_ulid(id: &str) -> Result<(), CliError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::facet::{ENV_TEST_LOCK, FACET_BIN_ENV, FACET_SESSION_ENV, TETRA_SESSION_ENV};
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
-    use std::sync::Mutex;
-
-    use crate::facet::{FACET_BIN_ENV, FACET_SESSION_ENV, TETRA_SESSION_ENV};
-
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn mock_facet_session() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

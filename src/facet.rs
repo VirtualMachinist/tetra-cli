@@ -8,6 +8,12 @@ use serde_json::Value;
 
 use crate::cli::CliError;
 
+/// One lock for every unit test that mutates process environment variables
+/// (`FACET_BIN`, `TETRA_SESSION`, `FACET_SESSION`). Tests in different
+/// modules run on parallel threads and must serialize on the same lock.
+#[cfg(test)]
+pub(crate) static ENV_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Facet JSON envelope version (must match `facet` / `probe-cli`).
 pub const SCHEMA_VERSION: u64 = 1;
 
@@ -142,9 +148,6 @@ pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), Cl
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
