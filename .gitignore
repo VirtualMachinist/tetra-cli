@@ -1,0 +1,7 @@
+/target
+*.db
+.facet/
+.tetra/
+intent.db
+*.swp
+.DS_Store
