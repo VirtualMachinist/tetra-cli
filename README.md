@@ -1,52 +1,49 @@
 # Tetra
 
-**The CLI language of the Hedronite platform.**
+**The world command of the Hedronite platform.**
 
-One Nickel world. Three engines. One verb surface.
+Nickel is the language. `tetractl` is the verb. Facet, HedronDB, and h3s stay engines.
 
 ```
 tetra      — the binary
-tetractl   — the kubectl-shaped alias
+tetractl   — the kubectl-shaped alias of that same binary
 ```
 
-Status: **charter** · Language: Nickel · Engines: Facet · HedronDB · h3s
-Repo: [VirtualMachinist/tetra-cli](https://github.com/VirtualMachinist/tetra-cli)
+Status: **charter** (shape locked 2026-09-12). Repo: [VirtualMachinist/tetra-cli](https://github.com/VirtualMachinist/tetra-cli).
 
-Built by [Hedronite](https://hedronite.com)'s [VirtualMachinist](https://github.com/VirtualMachinist).
+Canon: Atrium `foundry/tetra-cli/SHAPE.md`.
 
----
+## What it is
 
-Facet, HedronDB, and Hedronetes are one platform. Their *product* borders dissolve
-into a single declared world. Their *engines* stay split: Lattice still records
-calls, the vault still records intent, h3s still runs workloads.
+A **verbiage wrapper**. Operators and agents type `tetractl`, not `facet ncl` + `hedron` HQL + `kubectl`. Engines keep their jobs:
 
-Nickel is the declaration language. `tetra` is the verb language.
+| You type | Engine |
+|---|---|
+| `tetractl check` / `eval` / `apply` | `facet ncl *` (Facet embeds `nickel-lang-core` in `hedron-ncl`) |
+| intent status of names | HedronDB HQL |
+| cluster get / Ready | `kubectl` on the host that has kubeconfig |
+| `doctor` `session` `status` `diff` `blame` | Tetra only (gaps) |
+
+Tetra does **not** embed `nickel-lang-core`. There is no second VM. `facet ncl` remains the engine CLI for debug.
+
+## What embeds Nickel
+
+**Facet** crate `hedron-ncl` (`publish = false`). Not [facet-lattice](https://crates.io/crates/facet-lattice) (Lattice run-history, 0.5.9). There is no crates.io `facet-ncl`.
+
+## First verbs (M1, when code lands)
 
 ```text
-You write    .ncl                 (contracts, merge, overlays)
-tetra eval   the world            (typed, merged, documented)
-tetra apply  slices of it         (to Facet, HedronDB, h3s)
-tetra diff   desired vs observed
-tetra recon  until they meet
+tetractl doctor
+tetractl session start
+tetractl check worlds/prod.ncl
+tetractl eval  worlds/prod.ncl --json
+tetractl apply worlds/prod.ncl --dry-run --json
+tetractl status worlds/prod.ncl
+tetractl diff   worlds/prod.ncl
+tetractl blame  '<Status JSON or kubectl stderr>'
 ```
 
-## Docs
-
-| Doc | What it is |
-|---|---|
-| [docs/PLATFORM.md](docs/PLATFORM.md) | Doctrine. What unifies, what must not. |
-| [docs/TETRACTL.md](docs/TETRACTL.md) | Verb surface. Commands, envelopes, MCP. |
-| [docs/COMPANION_ADDENDUM.md](docs/COMPANION_ADDENDUM.md) | What changes in `COMPANION_SPEC.md`. |
-| [contracts/platform.ncl](contracts/platform.ncl) | The Tetra contract the world is checked against. |
-| [examples/world.ncl](examples/world.ncl) | A small merged world. |
-
-## Status
-
-Charter tree. The fleet's Nickel glue lands `eval` next.
-This repo is the contract and the verb surface, not a working binary yet.
-
-When code lands it will be Rust, embed `nickel-lang-core`, speak `--json`,
-and expose `tetra mcp` over stdio. There is nothing to `cargo run` today.
+There is nothing to `cargo run` today.
 
 ## License
 
