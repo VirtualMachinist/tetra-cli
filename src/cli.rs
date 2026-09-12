@@ -58,6 +58,8 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         rest: Vec<String>,
     },
+    /// Capability and host-law preflight (never prints secrets).
+    Doctor,
     /// Lattice session join key (wraps `facet session`).
     Session {
         #[command(subcommand)]
@@ -123,6 +125,7 @@ pub fn execute(invoked_as: &str) -> Result<(), CliError> {
         Some(Command::Check { path, rest }) => facet::run("check", &path, &rest, cli.json),
         Some(Command::Eval { path, rest }) => facet::run("export", &path, &rest, cli.json),
         Some(Command::Apply { path, rest }) => facet::run("apply", &path, &rest, cli.json),
+        Some(Command::Doctor) => crate::doctor::run(cli.json),
         Some(Command::Session { command }) => match command {
             SessionCommand::Start { rest } => session::start(&rest, cli.json),
             SessionCommand::End { id, rest } => session::end(id.as_deref(), &rest, cli.json),
