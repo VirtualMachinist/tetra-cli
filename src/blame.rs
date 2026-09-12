@@ -50,7 +50,10 @@ pub fn run(input: Option<&str>, json: bool) -> Result<(), CliError> {
     let text = load_input(input)?;
     let report = BlameReport::classify(&text)?;
     if json {
-        println!("{}", serde_json::to_string_pretty(&report.to_json()?).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report.to_json()?).unwrap()
+        );
     } else {
         print_human(&report);
     }
@@ -69,9 +72,8 @@ fn load_input(input: Option<&str>) -> Result<String, CliError> {
         Some(text) => {
             let path = Path::new(text);
             if path.is_file() {
-                fs::read_to_string(path).map_err(|error| {
-                    CliError::usage(format!("failed to read {text}: {error}"))
-                })
+                fs::read_to_string(path)
+                    .map_err(|error| CliError::usage(format!("failed to read {text}: {error}")))
             } else {
                 Ok(text.to_owned())
             }
@@ -87,19 +89,18 @@ fn classify_status_json(input: &str) -> Result<BlameReport, CliError> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| CliError::usage("status JSON missing message field"))?
         .to_owned();
-    let code = value
-        .get("code")
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u16);
+    let code = value.get("code").and_then(|v| v.as_u64()).map(|v| v as u16);
     classify_message("h3s", code, message)
 }
 
 fn classify_text(input: &str) -> Result<BlameReport, CliError> {
-    let engine = if input.contains("Error from server") {
-        "h3s"
-    } else if input.contains("The request is invalid:") {
-        "h3s"
-    } else if input.contains("violates PodSecurity") || input.contains("Pod cannot run under the") {
+    let from_server = [
+        "Error from server",
+        "The request is invalid:",
+        "violates PodSecurity",
+        "cannot run under the",
+    ];
+    let engine = if from_server.iter().any(|needle| input.contains(needle)) {
         "h3s"
     } else {
         "kubectl"
@@ -108,13 +109,11 @@ fn classify_text(input: &str) -> Result<BlameReport, CliError> {
         Some(403)
     } else if input.contains("(Invalid)") || input.contains("The request is invalid:") {
         Some(422)
-    } else if input.contains("(NotFound)") {
-        None
     } else {
         None
     };
     let message = normalize_message(input);
-    if message.contains("Pod cannot run under the") {
+    if message.contains("cannot run under the") {
         return classify_runtime(engine, code.or(Some(422)), &message);
     }
     if message.contains("violates PodSecurity") {
@@ -138,7 +137,7 @@ fn classify_message(
     message: String,
 ) -> Result<BlameReport, CliError> {
     let normalized = normalize_message(&message);
-    if normalized.contains("Pod cannot run under the") {
+    if normalized.contains("cannot run under the") {
         return classify_runtime(engine, code.or(Some(422)), &normalized);
     }
     if normalized.contains("violates PodSecurity") {
@@ -200,8 +199,10 @@ struct RuntimeParts {
 }
 
 fn parse_runtime(message: &str) -> Result<RuntimeParts, CliError> {
+    // "Pod cannot run under the …" and "template cannot run under the …"
+    // (workload templates) are the same runtime-profile refusal.
     let rest = message
-        .split("Pod cannot run under the ")
+        .split("cannot run under the ")
         .nth(1)
         .ok_or_else(|| CliError::usage("runtime sentence missing prefix"))?;
     let (profile, after_profile) = rest
@@ -250,18 +251,23 @@ fn normalize_message(input: &str) -> String {
     if let Some(rest) = input.split("Pod cannot run under the ").nth(1) {
         return format!("Pod cannot run under the {rest}");
     }
+    if let Some(rest) = input.split("template cannot run under the ").nth(1) {
+        return format!("template cannot run under the {rest}");
+    }
     if let Some(rest) = input.split("violates PodSecurity ").nth(1) {
         return format!("violates PodSecurity {rest}");
     }
     input.to_owned()
 }
 
+/// Sentences the `k8s-1.34-h3s-0.9.1` overlay legislates (token projection,
+/// service links, volume kinds). Field allowlists, UIDs, counts and probes
+/// are the runtime profile's own law, not a release gap: owner `runtime`.
 fn runtime_owner(sentence: &str) -> &'static str {
     if sentence.contains("token projection")
         || sentence.contains("volume sources")
         || sentence.contains("service environment")
         || sentence.contains("volume source")
-        || sentence.contains("execution field")
         || sentence.contains("ConfigMap and Secret")
     {
         "overlay"
