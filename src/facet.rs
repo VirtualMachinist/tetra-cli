@@ -147,11 +147,8 @@ pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), Cl
 
 /// Export a world module and return Facet's `schemaVersion: 1` JSON envelope.
 pub fn export_json(path: &Path, rest: &[String]) -> Result<Value, CliError> {
-    let mut args: Vec<std::ffi::OsString> = vec![
-        "ncl".into(),
-        "export".into(),
-        path.as_os_str().to_owned(),
-    ];
+    let mut args: Vec<std::ffi::OsString> =
+        vec!["ncl".into(), "export".into(), path.as_os_str().to_owned()];
     args.extend(rest.iter().map(std::ffi::OsString::from));
     let output = exec(args, true, true)?;
     if output.exit_code != 0 {

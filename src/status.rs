@@ -11,8 +11,8 @@ use serde_json::Value;
 use crate::cli::CliError;
 use crate::facet::{exec as facet_exec, export_json, passthrough_json, SCHEMA_VERSION};
 use crate::profile::{
-    env_configured, hedron_bin, kubectl_bin, FACET_HEDRON_DB_ENV, FACET_KUBECONFIG_ENV,
-    ProfileStatus,
+    env_configured, hedron_bin, kubectl_bin, ProfileStatus, FACET_HEDRON_DB_ENV,
+    FACET_KUBECONFIG_ENV,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -239,9 +239,8 @@ fn observe_intent(db: &str, name: &str) -> IntentObject {
 
 fn hedron_state(db: &str, intent_name: &str) -> Result<Value, String> {
     let escaped = intent_name.replace('"', "\\\"");
-    let query = format!(
-        "filter name = \"{escaped}\" | state | select name, spec, status, state_version"
-    );
+    let query =
+        format!("filter name = \"{escaped}\" | state | select name, spec, status, state_version");
     let mut command = Command::new(hedron_bin());
     command
         .args(["hql", "--db", db, "--format", "json", &query])
@@ -262,8 +261,7 @@ fn hedron_state(db: &str, intent_name: &str) -> Result<Value, String> {
     if stdout.is_empty() {
         return Ok(Value::Null);
     }
-    serde_json::from_slice(stdout)
-        .map_err(|error| format!("hedron stdout is not JSON: {error}"))
+    serde_json::from_slice(stdout).map_err(|error| format!("hedron stdout is not JSON: {error}"))
 }
 
 fn observe_calls(collection: &str) -> CallsObject {
@@ -409,11 +407,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("mock-facet");
         let export = mock_export();
-        fs::write(
-            &script,
-            format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", export),
-        )
-        .unwrap();
+        fs::write(&script, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", export)).unwrap();
         let mut perms = fs::metadata(&script).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&script, perms).unwrap();

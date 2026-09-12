@@ -48,7 +48,7 @@ fn diff_json_reports_drift_when_profiles_missing() {
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["schemaVersion"], 1);
     assert_eq!(json["equal"], false);
-    assert!(json["drift"].as_array().unwrap().len() >= 1);
+    assert!(!json["drift"].as_array().unwrap().is_empty());
     assert!(json["desiredExportHash"].as_str().unwrap().len() == 64);
 }
 
