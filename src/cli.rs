@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use clap::{CommandFactory, Parser, Subcommand};
 
-use crate::facet;
+use crate::{facet, session};
 
 pub const WRAP_ABOUT: &str =
     "World command for the Hedronite platform — a verbiage wrapper, not a second Nickel VM.";
@@ -58,6 +58,27 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         rest: Vec<String>,
     },
+    /// Lattice session join key (wraps `facet session`).
+    Session {
+        #[command(subcommand)]
+        command: SessionCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SessionCommand {
+    /// Start a session; prints ULID and sets TETRA_SESSION = FACET_SESSION.
+    Start {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
+    /// End a session (default: current TETRA_SESSION).
+    End {
+        /// Session ULID or `current`.
+        id: Option<String>,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
 }
 
 #[derive(Debug)]
@@ -102,6 +123,10 @@ pub fn execute(invoked_as: &str) -> Result<(), CliError> {
         Some(Command::Check { path, rest }) => facet::run("check", &path, &rest, cli.json),
         Some(Command::Eval { path, rest }) => facet::run("export", &path, &rest, cli.json),
         Some(Command::Apply { path, rest }) => facet::run("apply", &path, &rest, cli.json),
+        Some(Command::Session { command }) => match command {
+            SessionCommand::Start { rest } => session::start(&rest, cli.json),
+            SessionCommand::End { id, rest } => session::end(id.as_deref(), &rest, cli.json),
+        },
     }
 }
 

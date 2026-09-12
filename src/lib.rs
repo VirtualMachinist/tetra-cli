@@ -1,5 +1,6 @@
 mod cli;
 mod facet;
+mod session;
 
 pub use cli::CliError;
 

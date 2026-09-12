@@ -52,25 +52,35 @@ pub fn passthrough_json(stdout: &[u8]) -> Result<Value, CliError> {
     Ok(value)
 }
 
-/// `check` → `facet ncl check`, `export` → `facet ncl export`, `apply` → `facet ncl apply`.
-pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), CliError> {
+/// Captured Facet subprocess output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FacetOutput {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub exit_code: u8,
+}
+
+/// Exec Facet with optional `--json` and session forwarding.
+pub fn exec<I, S>(args: I, json: bool, forward: bool) -> Result<FacetOutput, CliError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
     let facet = facet_bin();
     let mut command = Command::new(&facet);
-    command.arg("ncl").arg(sub).arg(path).args(rest);
+    command.args(args);
     if json {
         command.arg("--json");
     }
-    forward_session(&mut command);
+    if forward {
+        forward_session(&mut command);
+    }
 
-    let child = command
+    let output = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| {
-            CliError::engine(format!("failed to exec {facet} ncl {sub}: {error}"), 127)
-        })?;
-
-    let output = child
+        .map_err(|error| CliError::engine(format!("failed to exec {facet}: {error}"), 127))?
         .wait_with_output()
         .map_err(|error| CliError::engine(error.to_string(), 127))?;
 
@@ -78,16 +88,55 @@ pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), Cl
         passthrough_json(&output.stdout)?;
     }
 
+    Ok(FacetOutput {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.status.code().unwrap_or(1) as u8,
+    })
+}
+
+/// Set [`TETRA_SESSION_ENV`] and [`FACET_SESSION_ENV`] to the same ULID.
+pub fn stamp_session(id: &str) {
+    std::env::set_var(TETRA_SESSION_ENV, id);
+    std::env::set_var(FACET_SESSION_ENV, id);
+}
+
+/// Clear tetra/facet session env vars in this process.
+pub fn clear_session() {
+    std::env::remove_var(TETRA_SESSION_ENV);
+    std::env::remove_var(FACET_SESSION_ENV);
+}
+
+/// Active session id from [`TETRA_SESSION_ENV`] or [`FACET_SESSION_ENV`].
+pub fn current_session_id() -> Result<String, CliError> {
+    if let Ok(id) = std::env::var(TETRA_SESSION_ENV) {
+        if !id.is_empty() {
+            return Ok(id);
+        }
+    }
+    if let Ok(id) = std::env::var(FACET_SESSION_ENV) {
+        if !id.is_empty() {
+            return Ok(id);
+        }
+    }
+    Err(CliError::usage("no active session; run `tetractl session start` first"))
+}
+
+/// `check` → `facet ncl check`, `export` → `facet ncl export`, `apply` → `facet ncl apply`.
+pub fn run(sub: &str, path: &Path, rest: &[String], json: bool) -> Result<(), CliError> {
+    let mut args: Vec<std::ffi::OsString> = vec![
+        "ncl".into(),
+        sub.into(),
+        path.as_os_str().to_owned(),
+    ];
+    args.extend(rest.iter().map(std::ffi::OsString::from));
+    let output = exec(args, json, true)?;
     io::stderr().write_all(&output.stderr).ok();
     io::stdout().write_all(&output.stdout).ok();
-
-    // Parity: Facet already reported the failure on its own stdout/stderr.
-    // Propagate the exit code without adding a second line.
-    let code = output.status.code().unwrap_or(1) as u8;
-    if output.status.success() {
+    if output.exit_code == 0 {
         Ok(())
     } else {
-        Err(CliError::engine(String::new(), code))
+        Err(CliError::engine(String::new(), output.exit_code))
     }
 }
 
