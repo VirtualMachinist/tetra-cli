@@ -1,0 +1,21 @@
+[package]
+name = "tetractl"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.83"
+license = "Apache-2.0"
+description = "World command for the Hedronite platform (charter). Nickel is the language; tetractl is the verb."
+repository = "https://github.com/VirtualMachinist/tetra-cli"
+homepage = "https://github.com/VirtualMachinist/tetra-cli"
+readme = "README.md"
+keywords = ["hedronite", "nickel", "cli"]
+categories = ["command-line-utilities"]
+publish = true
+
+[[bin]]
+name = "tetractl"
+path = "src/main.rs"
+
+[[bin]]
+name = "tetra"
+path = "src/main.rs"
