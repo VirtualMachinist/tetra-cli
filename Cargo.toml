@@ -4,13 +4,17 @@ version = "0.0.1"
 edition = "2021"
 rust-version = "1.83"
 license = "Apache-2.0"
-description = "World command for the Hedronite platform (charter). Nickel is the language; tetractl is the verb."
+description = "World command for the Hedronite platform. Nickel is the language; tetractl wraps Facet/Hedron/kubectl as they are."
 repository = "https://github.com/VirtualMachinist/tetra-cli"
 homepage = "https://github.com/VirtualMachinist/tetra-cli"
 readme = "README.md"
 keywords = ["hedronite", "nickel", "cli"]
 categories = ["command-line-utilities"]
 publish = true
+
+[lib]
+name = "tetractl"
+path = "src/lib.rs"
 
 [[bin]]
 name = "tetractl"
@@ -19,3 +23,9 @@ path = "src/main.rs"
 [[bin]]
 name = "tetra"
 path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3.14"
